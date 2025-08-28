@@ -26,13 +26,13 @@ The extreme skew in query patterns revealed that we could dramatically improve p
 
 Based on my analysis, I designed a three-tier ring architecture that optimizes for the actual query workload while respecting all system constraints. Here is the high-level approach: Instead of trying to optimize all 500 nodes, focus on the 37 that are actually queried.
 
-**Tier 1: Inner Ring (Nodes 0-9)
+**Tier 1: Inner Ring (Nodes 0-9)**
 - **Purpose**: Handle 63% of all queries (most popular targets)
 - **Strategy**: Linear progression 0→1→2→3→4→5→6→7→8→9→10
 - **Weights**: Maximum weight (10.0) for predictable, fast routing
 - **Result**: Queries to nodes 0-9 find their target in ~5 steps
 
-**Tier 2: Medium Ring (Nodes 10-49)
+**Tier 2: Medium Ring (Nodes 10-49)**
 - **Purpose**: Handle 36% of queries (medium popularity targets)
 - **Strategy**: Three-edge system per node for optimal connectivity
   - **Primary Path**: Sequential progression (weight 10.0)
@@ -40,7 +40,7 @@ Based on my analysis, I designed a three-tier ring architecture that optimizes f
   - **Backup Route**: Low-weight connection to node 0 (weight 1.0) as safety net
 - **Result**: Queries to nodes 10-49 find their target efficiently
 
-**Tier 3: Direct Redirection (Nodes 50-499)
+**Tier 3: Direct Redirection (Nodes 50-499)**
 - **Purpose**: Handle the 90% of nodes that are never queried
 - **Strategy**: Every unused node points directly to node 0 with maximum weight (10.0)
 - **Result**: If a query somehow reaches these nodes, it instantly gets redirected to the most popular target

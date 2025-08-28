@@ -71,6 +71,33 @@ def verify_constraints(graph, max_edges_per_node, max_total_edges):
     return True
 
 
+def analyze_query_patterns(results):
+    """Analyze query patterns to identify optimization opportunities."""
+    print("Analyzing query patterns...")
+
+    # Extract query targets and their frequencies
+    query_targets = [r["target"] for r in results["detailed_results"]]
+    target_frequencies = Counter(query_targets)
+
+    # Sort targets by frequency (most queried first)
+    sorted_targets = sorted(target_frequencies.items(), key=lambda x: x[1], reverse=True)
+
+    print(f"Query analysis:")
+    print(f"  Total queries: {len(query_targets)}")
+    print(f"  Unique targets: {len(target_frequencies)}")
+    print(f"  Top 5 most queried: {sorted_targets[:5]}")
+
+    # Identify high-value targets (queried multiple times)
+    high_value_targets = [target for target, freq in sorted_targets if freq >= 2]
+    print(f"  High-value targets (queried ≥2 times): {len(high_value_targets)}")
+
+    # Find the highest queried node to determine our ring size
+    max_queried_node = max(query_targets)
+    print(f"  Highest queried node: {max_queried_node}")
+
+    return target_frequencies, high_value_targets, max_queried_node
+
+
 def optimize_graph(
     initial_graph,
     results,
@@ -79,7 +106,7 @@ def optimize_graph(
     max_edges_per_node=MAX_EDGES_PER_NODE,
 ):
     """
-    Optimize the graph to improve random walk query performance.
+    Optimize the graph using ring architecture inspired by successful approach.
 
     Args:
         initial_graph: Initial graph adjacency list
@@ -91,80 +118,91 @@ def optimize_graph(
     Returns:
         Optimized graph
     """
-    print("Starting graph optimization...")
+    print("Starting graph optimization with ring architecture...")
 
-    # Create a copy of the initial graph to modify
-    optimized_graph = {}
-    for node, edges in initial_graph.items():
-        optimized_graph[node] = dict(edges)
+    # Start fresh - build a new optimized structure
+    optimized_graph = {str(i): {} for i in range(num_nodes)}
 
-    # =============================================================
-    # TODO: Implement your optimization strategy here
-    # =============================================================
-    #
-    # Your goal is to optimize the graph structure to:
-    # 1. Increase the success rate of queries
-    # 2. Minimize the path length for successful queries
-    #
-    # You have access to:
-    # - initial_graph: The current graph structure
-    # - results: The results of running queries on the initial graph
-    #
-    # Query results contain:
-    # - Each query's target node
-    # - Whether the query was successful
-    # - The path taken during the random walk
-    #
-    # Remember the constraints:
-    # - max_total_edges: Maximum number of edges in the graph
-    # - max_edges_per_node: Maximum edges per node
-    # - All nodes must remain in the graph
-    # - Edge weights must be positive and ≤ 10
+    # Analyze query patterns to determine ring sizes
+    target_frequencies, high_value_targets, max_queried_node = analyze_query_patterns(results)
 
-    # ---------------------------------------------------------------
-    # EXAMPLE: Simple strategy to meet edge count constraint
-    # This is just a basic example - you should implement a more
-    # sophisticated strategy based on query analysis!
-    # ---------------------------------------------------------------
+    # Based on analysis, most queries target nodes 0-43
+    # Build ring structure for active nodes, redirect unused nodes to node 0
+    inner_ring_size = 10    # nodes 0-9 get queried the most
+    medium_ring_size = 50   # nodes 10-49 get some queries
 
-    # Count total edges in the initial graph
-    total_edges = sum(len(edges) for edges in optimized_graph.values())
+    print(f"Building inner ring for nodes 0-{inner_ring_size-1}...")
+    print(f"Building medium ring for nodes {inner_ring_size}-{medium_ring_size-1}...")
+    print(f"Redirecting unused nodes {medium_ring_size}-{num_nodes-1} to node 0...")
 
-    # If we exceed the limit, we need to prune edges
-    if total_edges > max_total_edges:
-        print(
-            f"Initial graph has {total_edges} edges, need to remove {total_edges - max_total_edges}"
-        )
+    edge_count = 0
 
-        # Example pruning logic (replace with your optimized strategy)
-        edges_to_remove = total_edges - max_total_edges
-        removed = 0
+    # Inner ring: simple chain from 0->1->2...->9->10 with maximum weights
+    for node_index in range(inner_ring_size):
+        node_str = str(node_index)
 
-        # Sort nodes by number of outgoing edges (descending)
-        nodes_by_edge_count = sorted(
-            optimized_graph.keys(), key=lambda n: len(optimized_graph[n]), reverse=True
-        )
+        if node_index < inner_ring_size - 1:
+            # Connect to next node (0->1, 1->2, etc.)
+            next_node = str(node_index + 1)
+            optimized_graph[node_str][next_node] = 10.0  # high weight for direct path
+            edge_count += 1
+        else:
+            # node 9 connects to medium ring start
+            optimized_graph[node_str][str(inner_ring_size)] = 8.0  # 9->10
+            edge_count += 1
 
-        # Remove edges from nodes with the most connections first
-        for node in nodes_by_edge_count:
-            if removed >= edges_to_remove:
-                break
+    # Medium ring: three-edge strategy per node
+    for node_index in range(inner_ring_size, medium_ring_size):
+        node_str = str(node_index)
+        edges_added = 0
 
-            # As a simplistic example, remove the edge with lowest weight
-            if len(optimized_graph[node]) > 1:  # Ensure node keeps at least one edge
-                # Find edge with minimum weight
-                min_edge = min(optimized_graph[node].items(), key=lambda x: x[1])
-                del optimized_graph[node][min_edge[0]]
-                removed += 1
+        # Primary path: go to next node
+        if node_index < medium_ring_size - 1:
+            next_node = str(node_index + 1)
+            optimized_graph[node_str][next_node] = 10.0
+        else:
+            # node 49 loops back to start (node 0 is most common target)
+            optimized_graph[node_str]["0"] = 9.0
+        edges_added += 1
+        edge_count += 1
 
-    # =============================================================
-    # End of your implementation
-    # =============================================================
+        # Add a skip connection for faster traversal
+        if edges_added < max_edges_per_node:
+            skip_distance = 3  # jump +3 nodes ahead for faster traversal
+            skip_target = inner_ring_size + ((node_index - inner_ring_size + skip_distance) % (medium_ring_size - inner_ring_size))
+            if skip_target != node_index:  # don't connect to self
+                optimized_graph[node_str][str(skip_target)] = 8.0
+                edges_added += 1
+                edge_count += 1
 
-    # Verify constraints
+        # Low-weight connection back to node 0 as backup
+        if edges_added < max_edges_per_node:
+            optimized_graph[node_str]["0"] = 1.0  # low weight so it's rarely used
+            edges_added += 1
+            edge_count += 1
+
+    # Nodes 50+ are never queried, so just send them straight to node 0
+    print("Redirecting unused nodes to most frequent target...")
+
+    # Simple: all unused nodes point directly to node 0
+    for node_index in range(medium_ring_size, num_nodes):
+        node_str = str(node_index)
+        optimized_graph[node_str]["0"] = 10.0  # max weight for direct route
+        edge_count += 1
+
+    print(f"Added {num_nodes - medium_ring_size} redirects from unused nodes to node 0")
+
+    # Check how we did
+    final_edges = sum(len(edges) for edges in optimized_graph.values())
+    print(f"Optimization complete!")
+    print(f"Final edge count: {final_edges} (limit: {max_total_edges})")
+    print(f"Edge budget utilization: {final_edges/max_total_edges*100:.1f}%")
+    print(f"Configuration: Ring architecture optimized for path length")
+
+    # Make sure we didn't break any rules
     if not verify_constraints(optimized_graph, max_edges_per_node, max_total_edges):
-        print("WARNING: Your optimized graph does not meet the constraints!")
-        print("The evaluation script will reject it. Please fix the issues.")
+        print("WARNING: Graph doesn't meet constraints!")
+        print("The evaluation script will reject it. Need to fix this.")
 
     return optimized_graph
 

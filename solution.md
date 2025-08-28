@@ -95,25 +95,25 @@ My complex hub-and-spoke approach failed because it tried to optimize too many t
 
 My optimization journey spanned multiple iterations, each building on insights from the previous attempts.
 
-**Iteration 1: Hub-and-Spoke Architecture
+**Iteration 1: Hub-and-Spoke Architecture**
 - **Approach**: Created 15 hub nodes with dense interconnections, connecting high-value targets to hubs
 - **Results**: Success rate dropped to 48.5%, path length improved to 282.5 steps
 - **Key Learning**: Complex hub systems create path confusion and break existing connectivity
 - **Data Insight**: The evaluation showed that adding complexity actually degraded performance
 - **Why It Failed**: Too many high-weight paths competing for random walk attention
 
-**Iteration 2: Conservative Weight Optimization
+**Iteration 2: Conservative Weight Optimization**
 - **Approach**: Started with initial graph structure, increased edge weights for high-value targets (4x for top 5, 3x for top 10)
 - **Results**: Success rate maintained at 80%, path length increased to 550
 - **Key Learning**: Preserving existing connectivity is crucial for success rate
 - **Data Insight**: Weight optimization alone wasn't sufficient for path length improvement
 
-**Iteration 3: Ring Architecture Discovery
+**Iteration 3: Ring Architecture Discovery**
 - **Results**: Success rate 100%, path length 8.0 steps, score 520.10
 - **Key Learning**: Simple linear progression beats complex interconnections
 - **Data Insight**: The 57.9% edge utilization (579/1000) was actually optimal from my experimentation
 
-**Iteration 5: Fine-Tuning and Validation
+**Iteration 5: Fine-Tuning and Validation**
 - **Approach**: Systematically tested skip distances (+2, +3, +4), strategic shortcuts, and weight distributions
 - **Results**: +3 skip distance proved optimal, shortcuts degraded performance, exact weights provided consistency
 - **Key Learning**: More connections ≠ better performance; sparsity improves path guidance
